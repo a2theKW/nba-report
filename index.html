@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NBA averages and rest report</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #fffdf8; --ink: #1b1a17; --muted: #6b665c; --line: #ddd6c8;
+    --accent: #d2501e; --accent-ink: #ffffff; --good: #1d7a46; --bad: #b3261e; --soft: #efe9dc;
+    --bar: #d2501e; --bar-dim: #e9b9a3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141310; --panel: #1e1c18; --ink: #f1ede4; --muted: #a39c8e; --line: #36322b;
+      --accent: #f0703c; --accent-ink: #1b1a17; --good: #5fce8f; --bad: #ff8a80; --soft: #2a2721;
+      --bar: #f0703c; --bar-dim: #7a4a36;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  h1 {
+    margin: 0; font-size: clamp(26px, 6vw, 40px); line-height: 1.05; letter-spacing: -0.02em;
+    font-family: "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", sans-serif;
+    font-weight: 800; text-transform: uppercase;
+  }
+  h1 span { color: var(--accent); }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+  select, button {
+    font: inherit; color: var(--ink); background: var(--panel); border: 1.5px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; min-height: 44px; max-width: 100%;
+  }
+  select { width: 100%; }
+  button { cursor: pointer; font-weight: 600; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .tabs { display: flex; gap: 6px; border-bottom: 2px solid var(--line); margin-bottom: 16px; }
+  .tabs button { border: 0; border-radius: 10px 10px 0 0; background: transparent; color: var(--muted); padding: 10px 14px; margin-bottom: -2px; border-bottom: 3px solid transparent; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .seg { display: inline-flex; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; min-height: 40px; padding: 8px 14px; background: var(--panel); color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 0 16px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 14.5px; }
+  th, td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel); }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--ink); }
+  tr.total td { font-weight: 700; border-top: 2px solid var(--ink); border-bottom: 0; }
+  tr.me td { background: var(--soft); font-weight: 700; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .tile { background: var(--soft); border-radius: 12px; padding: 14px; }
+  .tile .k { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .tile .v { font-size: 34px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tile .s { font-size: 14px; color: var(--muted); }
+  .tile.big { background: var(--ink); color: var(--bg); }
+  .tile.big .k, .tile.big .s { color: inherit; opacity: 0.75; }
+  .pos { color: var(--good); } .neg { color: var(--bad); }
+  .tile.big .pos { color: #7be3a6; } .tile.big .neg { color: #ffa198; }
+  @media (prefers-color-scheme: dark) { .tile.big .pos { color: #1d7a46; } .tile.big .neg { color: #b3261e; } }
+  .status { padding: 14px; border-radius: 12px; background: var(--soft); color: var(--muted); font-size: 15px; }
+  .status.err { color: var(--bad); }
+  svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+  svg .val { fill: var(--ink); font-weight: 700; }
+  [hidden] { display: none !important; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>NBA averages <span>and rest</span> report</h1>
+    <div style="min-width:150px">
+      <label for="season">Season</label>
+      <select id="season"></select>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-players" aria-selected="true" aria-controls="view-players">Player averages</button>
+    <button role="tab" id="tab-rest" aria-selected="false" aria-controls="view-rest">Back-to-backs and rest</button>
+  </div>
+
+  <!-- Player averages -->
+  <section id="view-players" role="tabpanel" aria-labelledby="tab-players">
+    <div class="controls">
+      <div><label for="p-team">Team</label><select id="p-team"></select></div>
+      <div><label for="p-player">Player</label><select id="p-player"><option>Pick a team first</option></select></div>
+    </div>
+    <div id="p-status" class="status">Loading teams...</div>
+    <div id="p-out" hidden>
+      <div class="panel">
+        <div class="row">
+          <div>
+            <h2 id="p-title"></h2>
+            <div class="muted" id="p-sub"></div>
+          </div>
+          <div class="seg" role="group" aria-label="Group games by">
+            <button id="by-week" aria-pressed="true">Per week</button>
+            <button id="by-month" aria-pressed="false">Per month</button>
+          </div>
+        </div>
+        <div class="row" style="justify-content:flex-start">
+          <div style="min-width:180px"><label for="p-stat">Chart shows</label>
+            <select id="p-stat">
+              <option value="pts">Points per game</option>
+              <option value="reb">Rebounds per game</option>
+              <option value="ast">Assists per game</option>
+              <option value="min">Minutes per game</option>
+              <option value="stl">Steals per game</option>
+              <option value="blk">Blocks per game</option>
+              <option value="to">Turnovers per game</option>
+              <option value="fgp">Field goal percentage</option>
+              <option value="tpp">Three-point percentage</option>
+              <option value="ftp">Free throw percentage</option>
+            </select>
+          </div>
+        </div>
+        <div id="p-chart" class="scroll"></div>
+      </div>
+      <div class="panel">
+        <div class="scroll"><table id="p-table"></table></div>
+        <p class="muted" style="margin-top:10px">Regular season games only. Weeks run Monday to Sunday, using Eastern time dates. Shooting percentages are total makes divided by total attempts for that period.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Rest -->
+  <section id="view-rest" role="tabpanel" aria-labelledby="tab-rest" hidden>
+    <div class="controls">
+      <div><label for="r-team">Team</label><select id="r-team"></select></div>
+      <div><label for="r-def">Compare back-to-backs against</label>
+        <select id="r-def">
+          <option value="2">Games with 2 or more days of rest</option>
+          <option value="1">Games with 1 or more days of rest</option>
+        </select>
+      </div>
+    </div>
+    <div id="r-status" class="status">Pick a team.</div>
+    <div id="r-out" hidden>
+      <div class="panel">
+        <h2 id="r-title"></h2>
+        <p class="muted" id="r-sub"></p>
+        <div class="tiles" id="r-tiles"></div>
+        <div class="scroll"><table id="r-table"></table></div>
+        <p class="muted" style="margin-top:10px">A back-to-back here means the team also played the day before (zero days of rest). Days of rest are the full days off between two games. The first game of the season counts as rested.</p>
+      </div>
+      <div class="panel">
+        <div class="row">
+          <div>
+            <h2>How this compares with the other 29 teams</h2>
+            <div class="muted">Difference is back-to-back winning percentage minus rested winning percentage, in percentage points. Tap a column heading to sort.</div>
+          </div>
+          <button id="r-league-btn">Load all 30 teams</button>
+        </div>
+        <div id="r-league-status" class="muted"></div>
+        <div class="scroll"><table id="r-league"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <footer id="foot">Live data from ESPN's public feed, loaded when you open or change a selection. The feed is unofficial, so it can change or go quiet without notice. Past seasons use today's rosters for the player list.</footer>
+</div>
+
+<script>
+/* ===== LOGIC START (pure functions, no page access) ===== */
+const ET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+// Whole-day number for the Eastern time calendar date of an ISO timestamp.
+function dayNum(iso) {
+  const parts = ET.formatToParts(new Date(iso));
+  const g = t => +parts.find(p => p.type === t).value;
+  return Math.round(Date.UTC(g('year'), g('month') - 1, g('day')) / 864e5);
+}
+function dayDate(n) { return new Date(n * 864e5); }
+function shortDay(n) { const d = dayDate(n); return MONTHS[d.getUTCMonth()].slice(0, 3) + ' ' + d.getUTCDate(); }
+
+function parseGamelog(json) {
+  const labels = (json.labels || []).map(s => String(s).toUpperCase());
+  const ix = l => labels.indexOf(l);
+  const I = { min: ix('MIN'), fg: ix('FG'), tp: ix('3PT'), ft: ix('FT'), reb: ix('REB'), ast: ix('AST'), blk: ix('BLK'), stl: ix('STL'), to: ix('TO'), pts: ix('PTS') };
+  const num = (s, i) => i < 0 ? 0 : (parseFloat(s[i]) || 0);
+  const pair = (s, i) => { if (i < 0) return [0, 0]; const p = String(s[i] || '').split('-'); return [parseFloat(p[0]) || 0, parseFloat(p[1]) || 0]; };
+  const games = [], seen = new Set();
+  for (const st of json.seasonTypes || []) {
+    if (!/regular season/i.test(st.displayName || '')) continue;
+    for (const cat of st.categories || []) {
+      if (cat.type && cat.type !== 'event') continue;
+      for (const ev of cat.events || []) {
+        const meta = (json.events || {})[ev.eventId];
+        if (!meta || !meta.gameDate || !ev.stats || seen.has(ev.eventId)) continue;
+        seen.add(ev.eventId);
+        const s = ev.stats, fg = pair(s, I.fg), tp = pair(s, I.tp), ft = pair(s, I.ft);
+        games.push({ day: dayNum(meta.gameDate), min: num(s, I.min), pts: num(s, I.pts), reb: num(s, I.reb), ast: num(s, I.ast),
+          stl: num(s, I.stl), blk: num(s, I.blk), to: num(s, I.to), fgm: fg[0], fga: fg[1], tpm: tp[0], tpa: tp[1], ftm: ft[0], fta: ft[1] });
+      }
+    }
+  }
+  return games.sort((a, b) => a.day - b.day);
+}
+
+function average(games, label, key) {
+  const sum = k => games.reduce((t, g) => t + g[k], 0);
+  const n = games.length, per = k => n ? sum(k) / n : null, pct = (m, a) => sum(a) ? 100 * sum(m) / sum(a) : null;
+  return { key, label, gp: n, min: per('min'), pts: per('pts'), reb: per('reb'), ast: per('ast'), stl: per('stl'), blk: per('blk'), to: per('to'),
+    fgp: pct('fgm', 'fga'), tpp: pct('tpm', 'tpa'), ftp: pct('ftm', 'fta') };
+}
+
+function groupGames(games, mode) {
+  const map = new Map();
+  for (const g of games) {
+    const d = dayDate(g.day);
+    let key, label;
+    if (mode === 'month') {
+      key = d.getUTCFullYear() * 12 + d.getUTCMonth();
+      label = MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+    } else {
+      key = g.day - ((d.getUTCDay() + 6) % 7); // Monday of that week
+      label = shortDay(key) + ' to ' + shortDay(key + 6);
+    }
+    if (!map.has(key)) map.set(key, { label, games: [] });
+    map.get(key).games.push(g);
+  }
+  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([k, v]) => average(v.games, v.label, k));
+}
+
+// Completed regular season games for one team, each tagged with days of rest before it.
+function parseSchedule(json, teamId) {
+  const out = [];
+  for (const ev of json.events || []) {
+    const c = (ev.competitions || [])[0];
+    if (!c || !c.status || !c.status.type || !c.status.type.completed) continue;
+    const me = (c.competitors || []).find(x => String(x.id) === String(teamId) || (x.team && String(x.team.id) === String(teamId)));
+    const opp = (c.competitors || []).find(x => x !== me);
+    if (!me || !opp) continue;
+    let win = me.winner;
+    if (typeof win !== 'boolean') {
+      const a = me.score && +me.score.value, b = opp.score && +opp.score.value;
+      if (!isFinite(a) || !isFinite(b) || a === b) continue;
+      win = a > b;
+    }
+    out.push({ day: dayNum(ev.date), win });
+  }
+  out.sort((a, b) => a.day - b.day);
+  out.forEach((g, i) => { g.rest = i === 0 ? 99 : Math.max(0, g.day - out[i - 1].day - 1); });
+  return out;
+}
+
+function record(games) {
+  const w = games.filter(g => g.win).length, n = games.length;
+  return { w, l: n - w, n, pct: n ? 100 * w / n : null };
+}
+// restMin: 1 or 2. Rested games are those with at least that many days off.
+function restSummary(games, restMin) {
+  const b2b = record(games.filter(g => g.rest === 0));
+  const rested = record(games.filter(g => g.rest >= restMin));
+  return {
+    all: record(games), b2b, rested,
+    diff: (b2b.pct === null || rested.pct === null) ? null : b2b.pct - rested.pct,
+    buckets: [
+      ['Back-to-back (0 days of rest)', record(games.filter(g => g.rest === 0))],
+      ['1 day of rest', record(games.filter(g => g.rest === 1))],
+      ['2 days of rest', record(games.filter(g => g.rest === 2))],
+      ['3 or more days of rest', record(games.filter(g => g.rest >= 3))]
+    ]
+  };
+}
+/* ===== LOGIC END ===== */
+
+if (typeof document !== 'undefined') (function () {
+  const $ = id => document.getElementById(id);
+  const SITE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+  const WEB = 'https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba';
+  const cache = new Map();
+  function getJSON(url) {
+    if (!cache.has(url)) {
+      cache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error('ESPN answered with error ' + r.status); return r.json(); })
+        .catch(e => { cache.delete(url); throw e; }));
+    }
+    return cache.get(url);
+  }
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const f1 = v => v === null || v === undefined ? '-' : v.toFixed(1);
+  const signed = v => v === null ? '-' : (v > 0 ? '+' : '') + v.toFixed(1);
+  const cls = v => v === null ? '' : v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+  const failMsg = e => 'Could not load the data (' + esc(e.message || e) + '). Check your internet connection and try again.';
+
+  const state = { teams: [], mode: 'week', games: [], playerName: '', sched: {}, league: null, leagueSeason: null, sort: { key: 'diff', dir: -1 } };
+
+  // Season list. ESPN labels a season by the year it ends in.
+  const now = new Date(), current = now.getFullYear() + (now.getMonth() >= 9 ? 1 : 0);
+  for (let y = current; y >= current - 9; y--) $('season').add(new Option((y - 1) + '-' + String(y).slice(2), y));
+  const season = () => $('season').value;
+
+  // Tabs
+  function showTab(name) {
+    for (const t of ['players', 'rest']) {
+      $('tab-' + t).setAttribute('aria-selected', t === name);
+      $('view-' + t).hidden = t !== name;
+    }
+    if (name === 'rest') loadRest();
+  }
+  $('tab-players').onclick = () => showTab('players');
+  $('tab-rest').onclick = () => showTab('rest');
+
+  // Teams
+  // A snapshot file sits beside the hosted copy of this page, which is not allowed to call ESPN itself.
+  let snap = null;
+  const KEYS = ['day', 'min', 'pts', 'reb', 'ast', 'stl', 'blk', 'to', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta'];
+  const snapReady = (location.protocol === 'file:' ? Promise.resolve(null) : fetch('snapshot.json').then(r => r.ok ? r.json() : null).catch(() => null)).then(j => {
+    if (!j || !j.sched || !j.teams) return;
+    snap = j;
+    const sel = $('season'); sel.innerHTML = ''; sel.add(new Option((j.season - 1) + '-' + String(j.season).slice(2), j.season));
+    const d = new Date(j.updated);
+    $('foot').textContent = 'Stats are a saved copy from ESPN, last refreshed ' + MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() +
+      '. Games played after that are not included until the copy is refreshed. The player list uses the rosters from that day.';
+  });
+  const getTeams = () => snap ? Promise.resolve(snap.teams) :
+    getJSON(SITE + '/teams?limit=40').then(j => j.sports[0].leagues[0].teams.map(t => t.team));
+  const getRoster = id => snap ? Promise.resolve((snap.rosters[id] || []).map(a => ({ id: a[0], displayName: a[1], position: { abbreviation: a[2] } }))) :
+    getJSON(SITE + '/teams/' + id + '/roster').then(j => { let l = j.athletes || []; if (l.length && l[0].items) l = l.flatMap(g => g.items); return l; });
+  const getGames = (id, s) => snap ? Promise.resolve((snap.games[id] || []).map(r => Object.fromEntries(KEYS.map((k, i) => [k, r[i]])))) :
+    getJSON(WEB + '/athletes/' + id + '/gamelog?season=' + s).then(parseGamelog);
+
+  snapReady.then(getTeams).then(list => {
+    state.teams = list.slice().sort((a, b) => a.displayName.localeCompare(b.displayName));
+    for (const id of ['p-team', 'r-team']) {
+      const sel = $(id); sel.innerHTML = '';
+      sel.add(new Option('Choose a team', ''));
+      state.teams.forEach(t => sel.add(new Option(t.displayName, t.id)));
+    }
+    let saved = ''; try { saved = localStorage.getItem('nba-team') || ''; } catch (e) {}
+    if (saved && state.teams.some(t => t.id === saved)) { $('p-team').value = saved; $('r-team').value = saved; loadRoster(); }
+    else $('p-status').textContent = 'Pick a team, then a player.';
+  }).catch(e => { $('p-status').className = 'status err'; $('p-status').innerHTML = failMsg(e); });
+
+  function rememberTeam(id) { try { localStorage.setItem('nba-team', id); } catch (e) {} }
+
+  // ---------- Player averages ----------
+  function loadRoster() {
+    const id = $('p-team').value, sel = $('p-player');
+    $('p-out').hidden = true;
+    if (!id) return;
+    rememberTeam(id);
+    sel.innerHTML = '<option>Loading players...</option>';
+    $('p-status').hidden = false; $('p-status').className = 'status'; $('p-status').textContent = 'Loading players...';
+    getRoster(id).then(list => {
+      if ($('p-team').value !== id) return;
+      list = list.slice().sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+      sel.innerHTML = '';
+      sel.add(new Option('Choose a player', ''));
+      list.forEach(a => sel.add(new Option((a.displayName || a.fullName) + (a.position && a.position.abbreviation ? ' (' + a.position.abbreviation + ')' : ''), a.id)));
+      $('p-status').textContent = 'Now pick a player.';
+    }).catch(e => { $('p-status').className = 'status err'; $('p-status').innerHTML = failMsg(e); });
+  }
+  function loadPlayer() {
+    const id = $('p-player').value;
+    $('p-out').hidden = true;
+    if (!id) return;
+    const name = $('p-player').selectedOptions[0].text.replace(/ \([^)]*\)$/, '');
+    $('p-status').hidden = false; $('p-status').className = 'status'; $('p-status').textContent = 'Loading game log for ' + name + '...';
+    const s = season();
+    getGames(id, s).then(games => {
+      if ($('p-player').value !== id || season() !== s) return;
+      state.games = games; state.playerName = name;
+      if (!state.games.length) { $('p-status').textContent = name + ' has no regular season games on record for ' + $('season').selectedOptions[0].text + '.'; return; }
+      $('p-status').hidden = true; $('p-out').hidden = false;
+      renderPlayer();
+    }).catch(e => { $('p-status').className = 'status err'; $('p-status').innerHTML = failMsg(e); });
+  }
+  const COLS = [['gp', 'Games', 0], ['min', 'MIN'], ['pts', 'PTS'], ['reb', 'REB'], ['ast', 'AST'], ['stl', 'STL'], ['blk', 'BLK'], ['to', 'TO'], ['fgp', 'FG%'], ['tpp', '3P%'], ['ftp', 'FT%']];
+  function renderPlayer() {
+    const rows = groupGames(state.games, state.mode), total = average(state.games, 'Season so far', 'all');
+    $('p-title').textContent = state.playerName;
+    $('p-sub').textContent = $('season').selectedOptions[0].text + ' regular season, ' + total.gp + ' games, averages per ' + state.mode;
+    const cell = (r, c) => '<td>' + (c[2] === 0 ? r[c[0]] : f1(r[c[0]])) + '</td>';
+    const tr = (r, k) => '<tr' + (k ? ' class="' + k + '"' : '') + '><td>' + esc(r.label) + '</td>' + COLS.map(c => cell(r, c)).join('') + '</tr>';
+    $('p-table').innerHTML = '<thead><tr><th>' + (state.mode === 'week' ? 'Week' : 'Month') + '</th>' + COLS.map(c => '<th>' + c[1] + '</th>').join('') +
+      '</tr></thead><tbody>' + rows.slice().reverse().map(r => tr(r)).join('') + tr(total, 'total') + '</tbody>';
+    renderChart(rows, total);
+  }
+  function renderChart(rows, total) {
+    const stat = $('p-stat').value, vals = rows.map(r => r[stat]), avg = total[stat];
+    const max = Math.max(1, ...vals.map(v => v || 0), avg || 0) * 1.15;
+    const bw = state.mode === 'week' ? 46 : 84, gap = 10, padL = 8, padT = 22, h = 200, base = h - 34;
+    const w = Math.max(300, padL * 2 + rows.length * (bw + gap));
+    const y = v => base - (v / max) * (base - padT);
+    let s = '<svg role="img" aria-label="' + esc($('p-stat').selectedOptions[0].text + ' by ' + state.mode) + '" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">';
+    rows.forEach((r, i) => {
+      const x = padL + i * (bw + gap), v = vals[i];
+      const lab = state.mode === 'week' ? r.label.split(' to ')[0] : r.label.split(' ')[0].slice(0, 3) + ' ' + r.label.split(' ')[1].slice(2);
+      if (v !== null) {
+        s += '<rect x="' + x + '" y="' + y(v) + '" width="' + bw + '" height="' + Math.max(1, base - y(v)) + '" rx="4" fill="var(--bar)"><title>' + esc(r.label + ': ' + f1(v) + ' (' + r.gp + ' games)') + '</title></rect>';
+        s += '<text class="val" text-anchor="middle" x="' + (x + bw / 2) + '" y="' + (y(v) - 5) + '">' + f1(v) + '</text>';
+      }
+      s += '<text text-anchor="middle" x="' + (x + bw / 2) + '" y="' + (base + 15) + '">' + esc(lab) + '</text>';
+      s += '<text text-anchor="middle" x="' + (x + bw / 2) + '" y="' + (base + 29) + '">' + r.gp + ' gm</text>';
+    });
+    if (avg !== null) {
+      s += '<line x1="0" x2="' + w + '" y1="' + y(avg) + '" y2="' + y(avg) + '" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="5 4"/>';
+    }
+    s += '</svg>';
+    $('p-chart').innerHTML = s + (avg !== null ? '<div class="muted">Dashed line: season average of ' + f1(avg) + '. Numbers under each bar are games played.</div>' : '');
+    $('p-chart').scrollLeft = 1e6;
+  }
+  function setMode(m) {
+    state.mode = m;
+    $('by-week').setAttribute('aria-pressed', m === 'week'); $('by-month').setAttribute('aria-pressed', m === 'month');
+    if (state.games.length) renderPlayer();
+  }
+  $('by-week').onclick = () => setMode('week');
+  $('by-month').onclick = () => setMode('month');
+  $('p-stat').onchange = () => state.games.length && renderPlayer();
+  $('p-team').onchange = () => { $('r-team').value = $('p-team').value; loadRoster(); };
+  $('p-player').onchange = loadPlayer;
+
+  // ---------- Rest ----------
+  function schedule(teamId, s) {
+    const k = s + ':' + teamId;
+    if (state.sched[k]) return Promise.resolve(state.sched[k]);
+    if (snap) {
+      const out = (snap.sched[teamId] || []).map(r => ({ day: r[0], win: !!r[1] }));
+      out.forEach((g, i) => { g.rest = i === 0 ? 99 : Math.max(0, g.day - out[i - 1].day - 1); });
+      return Promise.resolve(state.sched[k] = out);
+    }
+    return getJSON(SITE + '/teams/' + teamId + '/schedule?season=' + s + '&seasontype=2').then(j => {
+      cache.delete(SITE + '/teams/' + teamId + '/schedule?season=' + s + '&seasontype=2'); // keep only the small parsed copy
+      return (state.sched[k] = parseSchedule(j, teamId));
+    });
+  }
+  const rec = r => r.n ? r.w + '-' + r.l : '-';
+  const pct = r => r.pct === null ? '-' : r.pct.toFixed(1) + '%';
+  function loadRest() {
+    const id = $('r-team').value, s = season();
+    $('r-out').hidden = true; $('r-status').hidden = false; $('r-status').className = 'status';
+    if (!id) { $('r-status').textContent = 'Pick a team.'; return; }
+    rememberTeam(id);
+    $('r-status').textContent = 'Loading schedule...';
+    schedule(id, s).then(games => {
+      if ($('r-team').value !== id || season() !== s) return;
+      if (!games.length) { $('r-status').textContent = 'No completed regular season games yet for this season.'; return; }
+      $('r-status').hidden = true; $('r-out').hidden = false;
+      renderRest(games);
+      if (state.leagueSeason !== s) { state.league = null; $('r-league').innerHTML = ''; $('r-league-status').textContent = ''; $('r-league-btn').hidden = false; }
+      else renderLeague();
+    }).catch(e => { $('r-status').className = 'status err'; $('r-status').innerHTML = failMsg(e); });
+  }
+  function renderRest(games) {
+    const restMin = +$('r-def').value, sum = restSummary(games, restMin);
+    const team = state.teams.find(t => t.id === $('r-team').value);
+    const restedName = restMin === 2 ? '2 or more days of rest' : '1 or more days of rest';
+    $('r-title').textContent = team.displayName + ', ' + $('season').selectedOptions[0].text;
+    $('r-sub').textContent = 'Overall record ' + rec(sum.all) + ' (' + pct(sum.all) + ') across ' + sum.all.n + ' completed regular season games against the rest of the league.';
+    let verdict = 'Not enough games in one of the two groups yet.';
+    if (sum.diff !== null) {
+      verdict = sum.diff === 0 ? 'Same winning percentage either way.' :
+        'They win ' + (sum.diff < 0 ? 'less' : 'more') + ' often on back-to-backs than with ' + restedName + '.';
+      if (sum.b2b.n < 5) verdict += ' Only ' + sum.b2b.n + ' back-to-back game' + (sum.b2b.n === 1 ? '' : 's') + ' so far, so treat this as an early read.';
+    }
+    $('r-tiles').innerHTML =
+      '<div class="tile"><div class="k">Back-to-back nights</div><div class="v">' + pct(sum.b2b) + '</div><div class="s">' + rec(sum.b2b) + ' in ' + sum.b2b.n + ' games</div></div>' +
+      '<div class="tile"><div class="k">' + esc(restedName) + '</div><div class="v">' + pct(sum.rested) + '</div><div class="s">' + rec(sum.rested) + ' in ' + sum.rested.n + ' games</div></div>' +
+      '<div class="tile big"><div class="k">Difference in win %</div><div class="v ' + cls(sum.diff) + '">' + signed(sum.diff) + '</div><div class="s">percentage points</div><div class="s">' + esc(verdict) + '</div></div>';
+    $('r-table').innerHTML = '<thead><tr><th>Rest before the game</th><th>Games</th><th>Record</th><th>Win %</th></tr></thead><tbody>' +
+      sum.buckets.map(b => '<tr><td>' + b[0] + '</td><td>' + b[1].n + '</td><td>' + rec(b[1]) + '</td><td>' + pct(b[1]) + '</td></tr>').join('') +
+      '<tr class="total"><td>All games</td><td>' + sum.all.n + '</td><td>' + rec(sum.all) + '</td><td>' + pct(sum.all) + '</td></tr></tbody>';
+  }
+  async function loadLeague() {
+    const s = season(), btn = $('r-league-btn');
+    btn.disabled = true;
+    const result = {}; let done = 0, failed = 0;
+    const queue = state.teams.slice();
+    const worker = async () => {
+      while (queue.length) {
+        const t = queue.shift();
+        try { result[t.id] = await schedule(t.id, s); } catch (e) { failed++; }
+        $('r-league-status').textContent = 'Loaded ' + (++done) + ' of ' + state.teams.length + ' teams...';
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    btn.disabled = false;
+    if (season() !== s) return;
+    state.league = result; state.leagueSeason = s;
+    $('r-league-status').textContent = failed ? failed + ' team' + (failed === 1 ? '' : 's') + ' could not be loaded. Press the button to try again.' : '';
+    btn.hidden = !failed;
+    renderLeague();
+  }
+  function renderLeague() {
+    if (!state.league) return;
+    const restMin = +$('r-def').value, mine = $('r-team').value;
+    const rows = state.teams.filter(t => state.league[t.id]).map(t => {
+      const s = restSummary(state.league[t.id], restMin);
+      return { id: t.id, name: t.displayName, all: s.all.pct, b2bN: s.b2b.n, b2b: s.b2b.pct, b2bRec: rec(s.b2b), rested: s.rested.pct, restedRec: rec(s.rested), diff: s.diff };
+    });
+    const { key, dir } = state.sort;
+    rows.sort((a, b) => {
+      if (key === 'name') return dir * a.name.localeCompare(b.name);
+      const x = a[key], y = b[key];
+      if (x === null) return 1; if (y === null) return -1;
+      return dir * (x - y) || a.name.localeCompare(b.name);
+    });
+    const all = Object.values(state.league).flat(), lg = restSummary(all, restMin);
+    const heads = [['name', 'Team'], ['all', 'Overall win %'], ['b2bN', 'Back-to-back games'], ['b2b', 'Back-to-back win %'], ['rested', 'Rested win %'], ['diff', 'Difference']];
+    const arrow = k => state.sort.key === k ? (state.sort.dir > 0 ? ' ▲' : ' ▼') : '';
+    const p = v => v === null ? '-' : v.toFixed(1) + '%';
+    $('r-league').innerHTML = '<thead><tr>' + heads.map(h => '<th class="sortable" data-k="' + h[0] + '">' + h[1] + arrow(h[0]) + '</th>').join('') + '</tr></thead><tbody>' +
+      rows.map(r => '<tr' + (r.id === mine ? ' class="me"' : '') + '><td>' + esc(r.name) + '</td><td>' + p(r.all) + '</td><td>' + r.b2bN + '</td><td>' + p(r.b2b) + ' <span class="muted">' + r.b2bRec + '</span></td><td>' +
+        p(r.rested) + ' <span class="muted">' + r.restedRec + '</span></td><td class="' + cls(r.diff) + '">' + signed(r.diff) + '</td></tr>').join('') +
+      '<tr class="total"><td>League as a whole</td><td>' + p(lg.all.pct) + '</td><td>' + lg.b2b.n + '</td><td>' + p(lg.b2b.pct) + '</td><td>' + p(lg.rested.pct) + '</td><td class="' + cls(lg.diff) + '">' + signed(lg.diff) + '</td></tr></tbody>';
+  }
+  $('r-league').onclick = e => {
+    const th = e.target.closest('th[data-k]'); if (!th) return;
+    const k = th.dataset.k;
+    state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === 'name' ? 1 : -1) };
+    renderLeague();
+  };
+  $('r-league-btn').onclick = loadLeague;
+  $('r-team').onchange = () => { $('p-team').value = $('r-team').value; loadRoster(); loadRest(); };
+  $('r-def').onchange = () => { const g = state.sched[season() + ':' + $('r-team').value]; if (g) { renderRest(g); renderLeague(); } };
+  $('season').onchange = () => { loadPlayer(); if (!$('view-rest').hidden) loadRest(); };
+})();
+</script>
+</body>
+</html>
